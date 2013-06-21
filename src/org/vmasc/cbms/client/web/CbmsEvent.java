@@ -1,7 +1,7 @@
 package org.vmasc.cbms.client.web;
 
 import java.io.IOException;
-import java.util.logging.Logger;
+//import java.util.logging.Logger;
 import org.xlightweb.IEventHandler;
 import org.xlightweb.client.HttpClient;
 
@@ -12,7 +12,7 @@ import org.xlightweb.client.HttpClient;
  */
 public class CbmsEvent
 {
-	private static final Logger LOGGER = Logger.getLogger(CbmsEvent.class.getName());
+	//private static final Logger LOGGER = Logger.getLogger(CbmsEvent.class.getName());
 	private HttpClient httpClient;
 	private String subscriptionUrl;
 	
@@ -44,10 +44,15 @@ public class CbmsEvent
 		
 		try 
 		{
-			LOGGER.info("CbmsEvent uri:" + subscriptionUrl);
+			//LOGGER.info("CbmsEvent uri:" + subscriptionUrl);
 			httpClient.openEventDataSource(subscriptionUrl, eventHandler);
 		} 
 		catch (IOException e) 
+		{
+			e.printStackTrace();
+			success = false;
+		}
+		catch(Exception e)
 		{
 			e.printStackTrace();
 			success = false;

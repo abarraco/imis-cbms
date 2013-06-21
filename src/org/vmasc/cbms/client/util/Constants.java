@@ -6,7 +6,7 @@ public class Constants
 	public static final int RECEIVER_START_ID = 10000;
 	
 	public static final int MAX_TIME_TO_WAIT = 20000;		//if this amount of time expires without receiving a report, exit (ms)
-	public static final int START_PROCESS_PAUSE = 4000; 	//the time to wait before starting sending processes to allow the receivers to fully initialize (ms)
+	public static final int START_PROCESS_PAUSE = 5000; 	//the time to wait before starting sending processes to allow the receivers to fully initialize (ms)
 	
 	public final static int CHART_HEIGHT = 15;				//height of chart as number of rows
 	public final static int CHART_LEFT = 3;				//left start row of the chart
@@ -43,6 +43,8 @@ public class Constants
 	public static final String DISPLAY_STR_SERVER = "Server:";
 	public static final String DISPLAY_STR_RESOURCE = "Resource:";
 	public static final String DISPLAY_STR_SAVE_TO_DB = "Save Updates to DB";
+	public static final String DISPLAY_STR_EXITING_SENDER = "Exiting Sender";
+	public static final String DISPLAY_STR_EXITING_RECEIVER = "Exiting Receiver";
 	
 	//
 	//Property strings

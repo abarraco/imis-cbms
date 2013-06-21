@@ -54,7 +54,7 @@ public class Trial
 			}
 			catch (Exception e)
 			{
-				System.out.println(e);
+				e.printStackTrace();
 			}
 		}
 	}
@@ -69,8 +69,7 @@ public class Trial
 	private int updateSize;
 	private int numSubscriptions;
 	
-	private List<Process> receiverProcessList = new ArrayList<Process>();						//the list of receiving prcoesses created for this test 
-	private List<Process> senderProcessList = new ArrayList<Process>();						//the list of receiving prcoesses created for this test 
+	private List<Process> processList = new ArrayList<Process>();						//the list of processes created for this test 
 	private List<TestRunValues> testRunValuesList = new ArrayList<TestRunValues>();		//the list of results from the sending and receiving processes created for this test
 	
 	private OutputPanel outputPanel;
@@ -143,11 +142,9 @@ public class Trial
 			String command = createProcessCommand(Integer.toString(i + receiverStartId), numReceiverReports);
 			try
 			{
-				//System.out.println("command:" + command);
 				outputPanel.appendText("Creating receiving process for Trial " + Integer.toString(trialId));
 				Process receiverProcess = Runtime.getRuntime().exec(command);
-				//outputPanel.appendText("Receiver:" + receiverProcess.toString());
-				receiverProcessList.add(receiverProcess);
+				processList.add(receiverProcess);
 				startProcessHandler(receiverProcess);
 			}
 			catch (IOException e)
@@ -174,11 +171,9 @@ public class Trial
 			String command = createProcessCommand(Integer.toString(i + senderStartId), Integer.toString(numUpdates));
 			try
 			{
-				//System.out.println("command:" + command);
 				outputPanel.appendText("Creating sending process for Trial " + Integer.toString(trialId));
 				Process senderProcess = Runtime.getRuntime().exec(command);
-				//outputPanel.appendText("Sender" + senderProcess.toString());
-				senderProcessList.add(senderProcess);
+				processList.add(senderProcess);
 				startProcessHandler(senderProcess);
 
 				try
@@ -234,6 +229,11 @@ public class Trial
 	
 		return testRunValuesFinal;
 	}
+	
+	//synchronized private void processExited()
+	//{
+	//	this.notify();
+	//}
 
 	/**
 	 * Run the test.
@@ -252,29 +252,27 @@ public class Trial
 	{
 		ProcessHandler inputStream = new ProcessHandler(process.getInputStream());
 		inputStream.start();
+		
+		ProcessHandler errorStream = new ProcessHandler(process.getErrorStream());
+		errorStream.start();
 	}
 
 	/**
 	 * Once the processes are running, this method waits for the subprocesses to terminate.
 	 */
-	private void waitForProcesses()
+	synchronized private void waitForProcesses()
 	{
-		for (Process process : receiverProcessList)
+		for (Process process : processList)
 		{
 			try
 			{
 				int exitValue = process.waitFor();
-				outputPanel.appendText("Process " + process.toString() + " complete in Trial " + Integer.toString(trialId) + " with exit value:" + Integer.toString(exitValue));
+				outputPanel.appendText("Process complete in Trial " + Integer.toString(trialId) + " with exit value:" + Integer.toString(exitValue));
 			}
 			catch (InterruptedException e)
 			{
 				e.printStackTrace();
 			}
-		}
-		
-		for (Process process : senderProcessList)
-		{
-			process.destroy();
 		}
 	}
 }

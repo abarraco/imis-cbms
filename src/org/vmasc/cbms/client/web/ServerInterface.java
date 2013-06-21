@@ -21,6 +21,7 @@ import org.xlightweb.IHttpResponse;
 import org.xlightweb.IHttpResponseHandler;
 import org.xlightweb.NonBlockingBodyDataSource;
 import org.vmasc.cbms.client.util.Params;
+import org.vmasc.cbms.client.util.ThreadPool;
 
 
 /**
@@ -30,99 +31,6 @@ import org.vmasc.cbms.client.util.Params;
  */
 public class ServerInterface
 {
-	//the maximum number of attempts when attempting to open a subscription data source
-	private static final int MAX_CONNECTION_ATTEMPTS = 5;
-	
-	private static final Logger LOGGER = Logger.getLogger(ServerInterface.class.getName());
-	
-	//return server responses using this interface
-    private CbmsMessageCallback cbmsMessageCallback = null;
-
-	public static final String JAXRX = "jax-rx";
-	public static final String SUBSCRIPTION = "subscriptions";
-	public static final String BINARY = "binary";
-	public static final String RESOURCE = Params.getString("RESOURCE");
-	public static final String SERVER = Params.getString("SERVER");
-	public static final String SYSTEM = Params.getString("SYSTEM");
-	
-	//the parameter key used when sending or retrieving a binary file name
-	static private final String PARAM_NAME = "var";
-	
-	private static String postUrl;
-	private static String postBinaryUrl;
-	
-	//the HTTP client used to post messages to the server 
-	private CbmsRequest cbmsRequest = null;
-	
-	//the HTTP clients used to subscribe to files posted to the server
-	private List <CbmsEvent> cbmsEventList = new ArrayList<CbmsEvent>();
-
-	/**
-	 * This class handles events received from the server.
-	 * @author abarraco
-	 *
-	 */
-	public class ServerEventHandler implements IEventHandler
-	{ 
-	    public void onConnect(IEventDataSource webEventDataSource) throws IOException 
-	    {
-	    	LOGGER.info("onConnect(): event stream established");
-	    }
-	        
-	    public void onMessage(IEventDataSource webEventDataSource) throws IOException 
-	    {
-	      Event event = webEventDataSource.readMessage();
-	      String xml = new String(event.getData());
-	      
-	      //send the message to the simulation
-	      receiveMessageFromCbms(xml);
-	    }
-	        
-	    public void onDisconnect(IEventDataSource webEventDataSource) throws IOException 
-	    {
-	    	LOGGER.info("onDisconnect(): event stream closed");
-	    }
-	}
-	
-	/**
-	 * This class handles the server response to a client request.
-	 * @author abarraco
-	 *
-	 */
-	public class ServerResponseHandler implements IHttpResponseHandler 
-	{
-	   public void onResponse(IHttpResponse response) throws IOException 
-	   {
-	      int status = response.getStatus();
-	      int length = response.getContentLength();
-	      LOGGER.info("ServerResponseHandler length:" + length + "  contenttype:" + response.getContentType() + "  status:" + Integer.toString(status));
-	      
-	      //if raw binary data
-	      if(response.getContentType().equals("application/octet-stream"))
-	      {
-	    	  String paramValue = response.getHeader(PARAM_NAME);
-	    	  if(paramValue != null)
-	    	  {
-	    		  response.getNonBlockingBody().setDataHandler(new BinaryBodyStreamer(length, paramValue));
-	    	  }
-	    	  else
-	    	  {
-	    		  LOGGER.info("onResponse: file name missing for binary data");
-	    	  }
-	      }
-	      //else expecting text
-	      else 
-	      {
-	    	  response.getNonBlockingBody().setDataHandler(new TextBodyStreamer());
-	      }
-	   }
-
-	   public void onException(IOException ioe) 
-	   {
-	      ioe.printStackTrace();
-	   }
-	}
-	
 	/**
 	 * This class reads the binary data of a server response in a non-blocking manner.
 	 * @author abarraco
@@ -186,6 +94,104 @@ public class ServerInterface
 	}
 	
 	/**
+	 * This class handles events received from the server.
+	 * @author abarraco
+	 *
+	 */
+	public class ServerEventHandler implements IEventHandler
+	{ 
+	    public void onConnect(IEventDataSource webEventDataSource) throws IOException 
+	    {
+	    	//LOGGER.info("onConnect(): event stream established");
+	    }
+	        
+	    public void onDisconnect(IEventDataSource webEventDataSource) throws IOException 
+	    {
+	    	//LOGGER.info("onDisconnect(): event stream closed");
+	    }
+	        
+	    public void onMessage(IEventDataSource webEventDataSource) throws IOException 
+	    {
+	      Event event = webEventDataSource.readMessage();
+	      String xml = new String(event.getData());
+	      
+	      //send the message to the simulation
+	      receiveMessageFromCbms(xml);
+	    }
+	}
+
+	/**
+	 * This class handles the server response to a client request.
+	 * @author abarraco
+	 *
+	 */
+	public class ServerResponseHandler implements IHttpResponseHandler 
+	{
+	   public void onException(IOException ioe) 
+	   {
+	      ioe.printStackTrace();
+	   }
+
+	   public void onResponse(IHttpResponse response) throws IOException 
+	   {
+	      //int status = response.getStatus();
+	      int length = response.getContentLength();
+	      //LOGGER.info("ServerResponseHandler length:" + length + "  contenttype:" + response.getContentType() + "  status:" + Integer.toString(status));
+	      
+	      //if raw binary data
+	      if(response.getContentType().equals("application/octet-stream"))
+	      {
+	    	  String paramValue = response.getHeader(PARAM_NAME);
+	    	  if(paramValue != null)
+	    	  {
+	    		  response.getNonBlockingBody().setDataHandler(new BinaryBodyStreamer(length, paramValue));
+	    	  }
+	    	  else
+	    	  {
+	    		  //LOGGER.info("onResponse: file name missing for binary data");
+	    	  }
+	      }
+	      //else expecting text
+	      else 
+	      {
+	    	  response.getNonBlockingBody().setDataHandler(new TextBodyStreamer());
+	      }
+	   }
+	}
+	
+	private class Subscribe implements Runnable
+	{
+		private String subscriptionUrl;		//the url and xPath expression 
+		private IEventHandler eventHandler;	//the handler of the received messages
+		
+		public Subscribe(String subscriptionUrl, IEventHandler eventHandler)
+		{
+			this.subscriptionUrl = subscriptionUrl;
+			this.eventHandler = eventHandler;
+		}
+		
+		/**
+		 * Open an event data source.
+		 */
+		public void run()
+		{
+			CbmsEvent cbmsEvent = new CbmsEvent(subscriptionUrl);
+			
+			//keep trying to connect until successful for up to MAX_CONNECTION_ATTEMPTS
+			boolean success;
+			int attempts = 0;
+			do
+			{
+				success = cbmsEvent.openEventDataSource(eventHandler);
+				attempts++;
+				//LOGGER.info("openEventDataSource success:" +  Boolean.toString(success) + " attempts:" + Integer.toString(attempts));
+			} while(success == false && attempts < MAX_CONNECTION_ATTEMPTS);
+			
+			if(success)
+				addEvent(cbmsEvent);
+		}
+	}
+	/**
 	 * This class reads the string data of a server response in a non-blocking manner.
 	 * @author abarraco
 	 *
@@ -226,6 +232,37 @@ public class ServerInterface
 			return true;
 		}	
 	}
+	//the maximum number of attempts when attempting to open a subscription data source
+	private static final int MAX_CONNECTION_ATTEMPTS = 5;
+	private static final Logger LOGGER = Logger.getLogger(ServerInterface.class.getName());
+	//return server responses using this interface
+    private CbmsMessageCallback cbmsMessageCallback = null;
+	
+	public static final String JAXRX = "jax-rx";
+	
+	public static final String SUBSCRIPTION = "subscriptions";
+	public static final String BINARY = "binary";
+	
+	public static final String RESOURCE = Params.getString("RESOURCE");
+	
+	public static final String SERVER = Params.getString("SERVER");
+	
+	public static final String SYSTEM = Params.getString("SYSTEM");
+	
+	//the parameter key used when sending or retrieving a binary file name
+	static private final String PARAM_NAME = "var";
+	
+	private static String postUrl;
+
+	private static String postBinaryUrl;
+	
+	//the HTTP client used to post messages to the server 
+	private CbmsRequest cbmsRequest = null;
+	
+	//the HTTP clients used to subscribe to files posted to the server
+	private List <CbmsEvent> cbmsEventList = new ArrayList<CbmsEvent>();
+	
+	private ThreadPool threadPool = new ThreadPool();
 
 	public ServerInterface(CbmsMessageCallback cbmsMessageCallback, int numSubscriptions)
 	{
@@ -237,45 +274,18 @@ public class ServerInterface
 		initRequests();	
 	}
 	
-	public void close()
+	public boolean isRequestReady()
 	{
+		boolean ready = false;
 		if(cbmsRequest != null)
-			cbmsRequest.closeClient();
-		
-		for(CbmsEvent cbmsEvent: cbmsEventList)
-			cbmsEvent.closeClient();
+			ready = true;
+
+		return ready;
 	}
 	
-	public String getPostUrl()
+	synchronized private void addEvent(CbmsEvent event)
 	{
-		return postUrl;
-	}
-	
-	/**
-	 * Request to retrieve a raw binary file from the server.
-	 * @param fileName: the name of the file to retrieve
-	 */
-	public void getBinaryRequest(String fileName)
-	{
-		cbmsRequest.getRequest(postBinaryUrl, PARAM_NAME, fileName);
-	}
-	
-	public void getRequest(String url)
-	{
-		cbmsRequest.getRequest(url);
-	}
-	
-	private void initRequests()
-	{
-		//create the URL for posting XML files
-		postUrl = "http://" + SERVER + "/" + SYSTEM + "/" + JAXRX + "/" + RESOURCE;
-		LOGGER.info("postUrl:" + postUrl);
-		
-		//create the URL for posting binary files
-		postBinaryUrl = "http://" + SERVER + "/" + SYSTEM + "/" + JAXRX + "/" + BINARY + "/" + RESOURCE;
-		LOGGER.info("postBinaryUrl:" + postBinaryUrl);
-		
-		cbmsRequest = new CbmsRequest(new ServerResponseHandler());
+		cbmsEventList.add(event);
 	}
 	
 	private void addSubscriptions(List <String> queries, int numSubscriptions)
@@ -292,6 +302,49 @@ public class ServerInterface
 		}
 	}
 	
+	synchronized public void close()
+	{
+		threadPool.shutdownAndAwaitTermination();
+		
+		if(cbmsRequest != null)
+			cbmsRequest.closeClient();
+		
+		for(CbmsEvent cbmsEvent: cbmsEventList)
+			cbmsEvent.closeClient();
+	}
+	
+	/**
+	 * Request to retrieve a raw binary file from the server.
+	 * @param fileName: the name of the file to retrieve
+	 */
+	public void getBinaryRequest(String fileName)
+	{
+		cbmsRequest.getRequest(postBinaryUrl, PARAM_NAME, fileName);
+	}
+	
+	public String getPostUrl()
+	{
+		return postUrl;
+	}
+	
+	public void getRequest(String url)
+	{
+		cbmsRequest.getRequest(url);
+	}
+	
+	private void initRequests()
+	{
+		//create the URL for posting XML files
+		postUrl = "http://" + SERVER + "/" + SYSTEM + "/" + JAXRX + "/" + RESOURCE;
+		//LOGGER.info("postUrl:" + postUrl);
+		
+		//create the URL for posting binary files
+		postBinaryUrl = "http://" + SERVER + "/" + SYSTEM + "/" + JAXRX + "/" + BINARY + "/" + RESOURCE;
+		//LOGGER.info("postBinaryUrl:" + postBinaryUrl);
+		
+		cbmsRequest = new CbmsRequest(new ServerResponseHandler());
+	}
+	
 	/**
 	 * Read subscription queries and open streams to receive server sent events.
 	 */
@@ -304,9 +357,18 @@ public class ServerInterface
 		for(int i = 0; i < size; i++)
 		{
 			String subscriptionUrl = "http://" + SERVER + "/" + SYSTEM + "/" + SUBSCRIPTION + "/" + RESOURCE + "?query=" + queries.get(i);
-			CbmsEvent cbmsEvent = subscribe(subscriptionUrl, new ServerEventHandler());
-			cbmsEventList.add(cbmsEvent);
+			threadPool.execute(new Subscribe(subscriptionUrl, new ServerEventHandler()));
 		}
+	}
+	
+	/**
+	 * Post a binary message to the server.
+	 * @param message: the binary data to be stored
+	 * @param fileName: the name of the file to store
+	 */
+	public void postBinaryRequest(byte[] message, String fileName)
+	{
+		cbmsRequest.postRequest(postBinaryUrl, message, PARAM_NAME, fileName);
 	}
 	
 	/**
@@ -326,16 +388,6 @@ public class ServerInterface
 	public void postRequest(String postUrl, String message)
 	{
 		cbmsRequest.postRequest(postUrl, message);
-	}
-	
-	/**
-	 * Post a binary message to the server.
-	 * @param message: the binary data to be stored
-	 * @param fileName: the name of the file to store
-	 */
-	public void postBinaryRequest(byte[] message, String fileName)
-	{
-		cbmsRequest.postRequest(postBinaryUrl, message, PARAM_NAME, fileName);
 	}
 	
 	/**
@@ -373,28 +425,5 @@ public class ServerInterface
 	private void receiveMessageFromCbms(String message)
 	{
 		this.cbmsMessageCallback.receiveMessageFromCbms(message);
-	}
-	
-	/**
-	 * Open an event data source.
-	 * @param subscriptionUrl: the url and xPath expression 
-	 * @param eventHandler: the handler of the received messages
-	 * @return: the CbmsEvent instance created as a result of the subscription
-	 */
-	public CbmsEvent subscribe(String subscriptionUrl, IEventHandler eventHandler)
-	{
-		CbmsEvent cbmsEvent = new CbmsEvent(subscriptionUrl);
-		
-		//keep trying to connect until successful for up to MAX_CONNECTION_ATTEMPTS
-		boolean success;
-		int attempts = 0;
-		do
-		{
-			success = cbmsEvent.openEventDataSource(eventHandler);
-			attempts++;
-			LOGGER.info("openEventDataSource success:" +  Boolean.toString(success) + " attempts:" + Integer.toString(attempts));
-		} while(success == false && attempts < MAX_CONNECTION_ATTEMPTS);
-		
-		return cbmsEvent;
 	}
 }

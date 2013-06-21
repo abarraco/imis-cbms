@@ -66,18 +66,16 @@ public class CbmsScalabilityTest
 			//if sender
 			if(!Utility.isReceiverId(clientId))
 			{
-				System.out.println("Creating sender");
 				Sender sender = new Sender(trialId, clientId, numReports, updateSize, reportInterval, numSubscriptions);
 				sender.sendReports();
-				System.out.println("Exiting sender");
+				System.out.println(Constants.DISPLAY_STR_EXITING_SENDER);
 			}
 			//else receiver
 			else
 			{
-				System.out.println("Creating receiver");
 				Receiver receiver = new Receiver(trialId, clientId, numReports, updateSize, reportInterval, numSubscriptions);
 				receiver.waitForReports();
-				System.out.println("Exiting receiver");
+				System.out.println(Constants.DISPLAY_STR_EXITING_RECEIVER);
 			}
 			
 			System.exit(0);

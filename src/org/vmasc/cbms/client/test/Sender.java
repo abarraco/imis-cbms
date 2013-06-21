@@ -113,6 +113,18 @@ public class Sender implements CbmsMessageCallback
 	
 	public void sendReports()
 	{
+		while(!serverInterface.isRequestReady())
+		{
+			try
+			{
+				Thread.sleep(1000);
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
+		} 
+		
 		for(int i = 0; i < numReports; i++)
 		{
 			long currentTime = Calendar.getInstance().getTimeInMillis();
@@ -134,6 +146,8 @@ public class Sender implements CbmsMessageCallback
 		logFile.close();
 		serverInterface.close();
 	}
+	
+	
 	
 	private void updateReportOid()
 	{

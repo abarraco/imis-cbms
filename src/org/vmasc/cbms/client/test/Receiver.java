@@ -149,6 +149,7 @@ public class Receiver implements CbmsMessageCallback
 			try 
 			{
 				lastNumReportsReceived = reportsReceived;
+				
 				this.wait(Constants.MAX_TIME_TO_WAIT);
 				if(lastNumReportsReceived == reportsReceived)
 					break;
@@ -158,7 +159,7 @@ public class Receiver implements CbmsMessageCallback
 				e.printStackTrace();
 			}
 		} while(numReports > reportsReceived);
-		
+	
 		logClosingData();
 		logFile.close();
 		serverInterface.close();
